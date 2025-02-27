@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import bcryptjs from "bcryptjs"
 import { db } from "@/lib/db"
 
 export async function POST(req: Request) {
@@ -14,11 +15,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Пользователь с таким email уже существует" }, { status: 409 })
     }
 
-    // Динамический импорт bcrypt
-    const bcrypt = await import("bcrypt")
-
     // Хеширование пароля
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcryptjs.hash(password, 10)
 
     // Создание нового пользователя
     const user = await db.user.create({

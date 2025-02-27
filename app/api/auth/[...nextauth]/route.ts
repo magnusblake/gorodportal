@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth"
 import NextAuth from "next-auth/next"
 import CredentialsProvider from "next-auth/providers/credentials"
+import bcryptjs from "bcryptjs"
 
 import { db } from "@/lib/db"
 
@@ -25,8 +26,7 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        const bcrypt = await import("bcrypt")
-        const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
+        const isPasswordValid = await bcryptjs.compare(credentials.password, user.password)
 
         if (!isPasswordValid) {
           return null
