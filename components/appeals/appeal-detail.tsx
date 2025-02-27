@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/components/ui/use-toast"
 import { updateAppealStatus, deleteAppeal } from "@/lib/actions"
-import { ArrowLeft, Trash } from "lucide-react"
+import { ArrowLeft, Trash, FileIcon, DownloadIcon } from "lucide-react"
 
 type Appeal = {
   id: string
@@ -41,6 +41,10 @@ type Appeal = {
     id: string
     content: string
     createdAt: Date
+  }[]
+  attachments: {
+    id: string
+    fileName: string
   }[]
 }
 
@@ -165,6 +169,22 @@ export function AppealDetail({ appeal, isAdmin }: { appeal: Appeal; isAdmin: boo
             <p className="whitespace-pre-line">{appeal.content}</p>
           </div>
         </CardContent>
+        {appeal.attachments && appeal.attachments.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Прикрепленные файлы:</h3>
+            <ul className="space-y-2">
+              {appeal.attachments.map((attachment) => (
+                <li key={attachment.id} className="flex items-center space-x-2">
+                  <FileIcon className="w-4 h-4" />
+                  <span>{attachment.fileName}</span>
+                  <a href={`/uploads/${attachment.fileName}`} download className="text-blue-500 hover:text-blue-700">
+                    <DownloadIcon className="w-4 h-4" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {isAdmin && (
           <CardFooter className="flex justify-between">
             <div className="flex gap-2">

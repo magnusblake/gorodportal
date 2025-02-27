@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth/next"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { DashboardTabs } from "@/components/dashboard/dashboard-tabs"
+import { CategoryStats } from "@/components/dashboard/category-stats"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -19,7 +20,10 @@ export default async function DashboardPage() {
   return (
     <div className="container py-10">
       <h1 className="text-3xl font-bold mb-6">Личный кабинет</h1>
-      <DashboardTabs userId={session.user.id} />
+      <div className="grid gap-6 md:grid-cols-2">
+        <DashboardTabs userId={session.user.id} />
+        <CategoryStats />
+      </div>
     </div>
   )
 }

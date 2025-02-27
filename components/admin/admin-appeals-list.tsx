@@ -1,229 +1,179 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import type React from "react"
+
+import { useState, useEffect, useCallback } from "react"
 import { formatDate } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { useToast } from "@/components/ui/use-toast"
-import { updateAppealStatus, deleteAppeal } from "@/lib/actions"
-import { MoreHorizontal, Eye } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Pagination } from "@/components/ui/pagination"
 
 type Appeal = {
   id: string
   title: string
+  content: string
   status: string
-  createdAt: Date
-  user: {
-    name: string | null
-    email: string | null
-  }
+  createdAt: string
+  updatedAt: string
+  userId: string
+  categoryId: string
   category: {
     name: string
   }
+  user: {
+    name: string
+    email: string
+  }
 }
 
-interface AdminAppealsListProps {
-  query: string
-  page: number
-  onTotalPagesChange: (totalPages: number) => void
-}
-
-export function AdminAppealsList({ query, page, onTotalPagesChange }: AdminAppealsListProps) {
-  const router = useRouter()
-  const { toast } = useToast()
+export function AdminAppealsList() {
   const [appeals, setAppeals] = useState<Appeal[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [deleteAppealId, setDeleteAppealId] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [sortBy, setSortBy] = useState("createdAt")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
-  useEffect(() => {
-    const fetchAppeals = async () => {
-      setIsLoading(true)
-      const response = await fetch(`/api/appeals/admin?query=${encodeURIComponent(query)}&page=${page}`)
+  const fetchAppeals = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch(
+        `/api/appeals/admin?page=${currentPage}&query=${searchQuery}&status=${statusFilter}&sortBy=${sortBy}&sortOrder=${sortOrder}`,
+      )
       const data = await response.json()
       setAppeals(data.appeals)
-      onTotalPagesChange(data.totalPages)
-      setIsLoading(false)
+      setTotalPages(data.totalPages)
+    } catch (error) {
+      console.error("Error fetching appeals:", error)
     }
+    setIsLoading(false)
+  }, [currentPage, searchQuery, statusFilter, sortBy, sortOrder])
 
+  useEffect(() => {
     fetchAppeals()
-  }, [query, page, onTotalPagesChange])
+  }, [fetchAppeals])
+
+  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setCurrentPage(1)
+    fetchAppeals()
+  }
+
+  const handleStatusChange = (value: string) => {
+    setStatusFilter(value)
+    setCurrentPage(1)
+  }
+
+  const handleSortChange = (value: string) => {
+    setSortBy(value)
+    setCurrentPage(1)
+  }
+
+  const toggleSortOrder = () => {
+    setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+    setCurrentPage(1)
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "PENDING":
-        return (
-          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">
-            На рассмотрении
-          </Badge>
-        )
+        return <Badge variant="warning">На рассмотрении</Badge>
       case "IN_PROGRESS":
-        return (
-          <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-            В работе
-          </Badge>
-        )
-      case "ANSWERED":
-        return (
-          <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
-            Есть ответ
-          </Badge>
-        )
-      case "CLOSED":
-        return (
-          <Badge variant="outline" className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300">
-            Закрыто
-          </Badge>
-        )
+        return <Badge variant="info">В работе</Badge>
+      case "RESOLVED":
+        return <Badge variant="success">Решено</Badge>
       case "REJECTED":
-        return (
-          <Badge variant="outline" className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">
-            Отклонено
-          </Badge>
-        )
+        return <Badge variant="destructive">Отклонено</Badge>
       default:
-        return <Badge variant="outline">Неизвестно</Badge>
-    }
-  }
-
-  const handleStatusChange = async (appealId: string, newStatus: string) => {
-    const result = await updateAppealStatus(appealId, newStatus)
-    if (result.success) {
-      toast({
-        title: "Статус обновлен",
-        description: "Статус обращения успешно изменен",
-      })
-      router.refresh()
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Ошибка",
-        description: result.error || "Не удалось обновить статус",
-      })
-    }
-  }
-
-  const handleDelete = async (appealId: string) => {
-    setIsDeleting(true)
-    const result = await deleteAppeal(appealId)
-    setIsDeleting(false)
-    setDeleteAppealId(null)
-
-    if (result.success) {
-      toast({
-        title: "Обращение удалено",
-        description: "Обращение успешно удалено",
-      })
-      router.refresh()
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Ошибка",
-        description: result.error || "Не удалось удалить обращение",
-      })
+        return <Badge variant="secondary">Неизвестно</Badge>
     }
   }
 
   if (isLoading) {
-    return <p className="text-center">Загрузка обращений...</p>
-  }
-
-  if (appeals.length === 0) {
-    return <p className="text-center text-muted-foreground">Обращения не найдены</p>
+    return <div>Загрузка...</div>
   }
 
   return (
-    <div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>ID</TableHead>
-            <TableHead>Заголовок</TableHead>
-            <TableHead>Статус</TableHead>
-            <TableHead>Автор</TableHead>
-            <TableHead>Категория</TableHead>
-            <TableHead>Дата создания</TableHead>
-            <TableHead>Действия</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {appeals.map((appeal) => (
-            <TableRow key={appeal.id}>
-              <TableCell className="font-medium">{appeal.id}</TableCell>
-              <TableCell>{appeal.title}</TableCell>
-              <TableCell>{getStatusBadge(appeal.status)}</TableCell>
-              <TableCell>{appeal.user.name || appeal.user.email}</TableCell>
-              <TableCell>{appeal.category.name}</TableCell>
-              <TableCell>{formatDate(appeal.createdAt.toString())}</TableCell>
-              <TableCell>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                      <span className="sr-only">Открыть меню</span>
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Действия</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => router.push(`/appeals/${appeal.id}`)}>
-                      <Eye className="mr-2 h-4 w-4" />
-                      <span>Просмотреть</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleStatusChange(appeal.id, "IN_PROGRESS")}>
-                      Взять в работу
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleStatusChange(appeal.id, "CLOSED")}>Закрыть</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleStatusChange(appeal.id, "REJECTED")}>
-                      Отклонить
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setDeleteAppealId(appeal.id)}>Удалить</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
+    <Card>
+      <CardHeader>
+        <CardTitle>Управление обращениями</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSearch} className="flex gap-2 mb-4">
+          <Input
+            type="text"
+            placeholder="Поиск по обращениям..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <Button type="submit">Поиск</Button>
+        </form>
+        <div className="flex gap-2 mb-4">
+          <Select value={statusFilter} onValueChange={handleStatusChange}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Фильтр по статусу" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все статусы</SelectItem>
+              <SelectItem value="PENDING">На рассмотрении</SelectItem>
+              <SelectItem value="IN_PROGRESS">В работе</SelectItem>
+              <SelectItem value="RESOLVED">Решено</SelectItem>
+              <SelectItem value="REJECTED">Отклонено</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={handleSortChange}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Сортировать по" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="createdAt">Дате создания</SelectItem>
+              <SelectItem value="updatedAt">Дате обновления</SelectItem>
+              <SelectItem value="status">Статусу</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={toggleSortOrder}>{sortOrder === "asc" ? "По возрастанию" : "По убыванию"}</Button>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Заголовок</TableHead>
+              <TableHead>Статус</TableHead>
+              <TableHead>Категория</TableHead>
+              <TableHead>Пользователь</TableHead>
+              <TableHead>Дата создания</TableHead>
+              <TableHead>Действия</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-
-      <AlertDialog open={!!deleteAppealId} onOpenChange={() => setDeleteAppealId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Вы уверены?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Это действие нельзя отменить. Обращение будет удалено навсегда.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteAppealId && handleDelete(deleteAppealId)}
-              className="bg-red-600 focus:ring-red-600"
-            >
-              {isDeleting ? "Удаление..." : "Удалить"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {appeals.map((appeal) => (
+              <TableRow key={appeal.id}>
+                <TableCell>{appeal.id}</TableCell>
+                <TableCell>{appeal.title}</TableCell>
+                <TableCell>{getStatusBadge(appeal.status)}</TableCell>
+                <TableCell>{appeal.category.name}</TableCell>
+                <TableCell>{appeal.user.name}</TableCell>
+                <TableCell>{formatDate(appeal.createdAt)}</TableCell>
+                <TableCell>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`/admin/appeals/${appeal.id}`}>Просмотр</a>
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+      <CardFooter>
+        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+      </CardFooter>
+    </Card>
   )
 }
 

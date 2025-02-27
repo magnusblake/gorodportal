@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { db } from "@/lib/db"
+import { db } from "@/lib/local-db"
 
 const ITEMS_PER_PAGE = 9
 
@@ -8,22 +8,20 @@ export async function GET(request: Request) {
   const query = searchParams.get("query") || ""
   const page = Number.parseInt(searchParams.get("page") || "1", 10)
 
-  const where = {
-    published: true,
-    OR: [{ title: { contains: query, mode: "insensitive" } }, { content: { contains: query, mode: "insensitive" } }],
-  }
+  let news = db.news.findAll().filter((item) => item.published)
 
-  const [news, totalCount] = await Promise.all([
-    db.news.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: ITEMS_PER_PAGE,
-      skip: (page - 1) * ITEMS_PER_PAGE,
-    }),
-    db.news.count({ where }),
-  ])
+  news = news.filter(
+    (item) =>
+      item.title.toLowerCase().includes(query.toLowerCase()) ||
+      item.content.toLowerCase().includes(query.toLowerCase()),
+  )
 
+  const totalCount = news.length
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
+
+  news = news
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
 
   return NextResponse.json({ news, totalPages })
 }

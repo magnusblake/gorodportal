@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
-import { db } from "@/lib/db"
+import { db } from "@/lib/local-db"
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions)
@@ -10,43 +10,17 @@ export async function GET(request: Request, { params }: { params: { id: string }
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const stats = await db.appeal.groupBy({
-    by: ["status"],
-    where: { userId: params.id },
-    _count: true,
-  })
+  const appeals = db.appeals.findAll().filter((appeal) => appeal.userId === params.id)
 
-  const total = stats.reduce((acc, curr) => acc + curr._count, 0)
-
-  const formattedStats = {
-    total,
-    pending: 0,
-    inProgress: 0,
-    answered: 0,
-    closed: 0,
-    rejected: 0,
+  const stats = {
+    total: appeals.length,
+    pending: appeals.filter((appeal) => appeal.status === "PENDING").length,
+    inProgress: appeals.filter((appeal) => appeal.status === "IN_PROGRESS").length,
+    answered: appeals.filter((appeal) => appeal.status === "ANSWERED").length,
+    closed: appeals.filter((appeal) => appeal.status === "CLOSED").length,
+    rejected: appeals.filter((appeal) => appeal.status === "REJECTED").length,
   }
 
-  stats.forEach((stat) => {
-    switch (stat.status) {
-      case "PENDING":
-        formattedStats.pending = stat._count
-        break
-      case "IN_PROGRESS":
-        formattedStats.inProgress = stat._count
-        break
-      case "ANSWERED":
-        formattedStats.answered = stat._count
-        break
-      case "CLOSED":
-        formattedStats.closed = stat._count
-        break
-      case "REJECTED":
-        formattedStats.rejected = stat._count
-        break
-    }
-  })
-
-  return NextResponse.json(formattedStats)
+  return NextResponse.json(stats)
 }
 

@@ -30,7 +30,7 @@ type NewsItem = {
   id: string
   title: string
   published: boolean
-  createdAt: Date
+  createdAt: string
 }
 
 export function AdminNewsList({ news }: { news: NewsItem[] }) {
@@ -93,7 +93,7 @@ export function AdminNewsList({ news }: { news: NewsItem[] }) {
             <TableRow key={item.id}>
               <TableCell className="font-medium">{item.title}</TableCell>
               <TableCell>{item.published ? "Опубликовано" : "Черновик"}</TableCell>
-              <TableCell>{formatDate(item.createdAt.toString())}</TableCell>
+              <TableCell>{formatDate(item.createdAt)}</TableCell>
               <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

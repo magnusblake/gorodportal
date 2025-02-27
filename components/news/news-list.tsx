@@ -11,7 +11,7 @@ type NewsItem = {
   title: string
   content: string
   image: string | null
-  createdAt: Date
+  createdAt: string
 }
 
 interface NewsListProps {
@@ -58,7 +58,7 @@ export function NewsList({ query, page, onTotalPagesChange }: NewsListProps) {
               />
             )}
             <CardTitle>{item.title}</CardTitle>
-            <CardDescription>{formatDate(item.createdAt.toString())}</CardDescription>
+            <CardDescription>{formatDate(item.createdAt)}</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="line-clamp-3 text-muted-foreground">{item.content}</p>

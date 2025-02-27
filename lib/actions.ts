@@ -4,6 +4,9 @@ import { db } from "@/lib/local-db"
 import { revalidatePath } from "next/cache"
 import { sendEmail } from "@/lib/email"
 import { v4 as uuidv4 } from "uuid"
+import { writeFile } from "fs/promises"
+import path from "path"
+import bcryptjs from "bcryptjs"
 
 // Счетчик посещений
 export async function incrementVisitorCount() {
@@ -31,23 +34,46 @@ export async function getVisitorCount() {
 }
 
 // Обращения
-export async function createAppeal(data: {
-  title: string
-  content: string
-  categoryId: string
-  userId: string
-}) {
+export async function createAppeal(formData: FormData) {
   try {
+    const title = formData.get("title") as string
+    const content = formData.get("content") as string
+    const categoryId = formData.get("categoryId") as string
+    const userId = formData.get("userId") as string
+
+    const appealId = uuidv4()
     const appeal = db.appeals.create({
-      id: uuidv4(),
-      title: data.title,
-      content: data.content,
+      id: appealId,
+      title,
+      content,
       status: "PENDING",
-      categoryId: data.categoryId,
-      userId: data.userId,
+      categoryId,
+      userId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     })
+
+    // Handle file attachments
+    const attachments = []
+    for (let i = 0; formData.get(`attachment${i}`); i++) {
+      const file = formData.get(`attachment${i}`) as File
+      const fileName = `${appealId}-${file.name}`
+      const filePath = path.join(process.cwd(), "public", "uploads", fileName)
+
+      await writeFile(filePath, Buffer.from(await file.arrayBuffer()))
+
+      attachments.push({
+        id: uuidv4(),
+        appealId,
+        fileName,
+        fileSize: file.size,
+        fileType: file.type,
+        uploadedAt: new Date().toISOString(),
+      })
+    }
+
+    // Save attachments to the database
+    db.appealAttachments.createMany(attachments)
 
     revalidatePath("/appeals/my")
     return { success: true }
@@ -212,6 +238,31 @@ export async function updateUserProfile(
   }
 }
 
+export async function changeUserPassword(userId: string, currentPasswordPlain: string, newPasswordPlain: string) {
+  try {
+    const user = db.users.findById(userId)
+    if (!user || !user.password) {
+      return { success: false, error: "Пользователь не найден" }
+    }
+
+    const isPasswordValid = await bcryptjs.compare(currentPasswordPlain, user.password)
+
+    if (!isPasswordValid) {
+      return { success: false, error: "Неверный текущий пароль" }
+    }
+
+    const hashedPassword = await bcryptjs.hash(newPasswordPlain, 10)
+
+    db.users.update(userId, { password: hashedPassword })
+
+    revalidatePath("/profile")
+    return { success: true }
+  } catch (error) {
+    console.error("Error changing user password:", error)
+    return { success: false, error: "Не удалось изменить пароль" }
+  }
+}
+
 export async function updateUserNotificationSettings(
   userId: string,
   data: {
@@ -343,7 +394,7 @@ export async function createFAQ(data: {
   order: number
 }) {
   try {
-    db.faqs.create({
+    db.faq.create({
       id: uuidv4(),
       question: data.question,
       answer: data.answer,
@@ -372,7 +423,7 @@ export async function updateFAQ(
   },
 ) {
   try {
-    db.faqs.update(id, data)
+    db.faq.update(id, data)
 
     revalidatePath("/admin/faq")
     revalidatePath("/faq")
@@ -385,7 +436,7 @@ export async function updateFAQ(
 
 export async function deleteFAQ(id: string) {
   try {
-    db.faqs.delete(id)
+    db.faq.remove(id)
 
     revalidatePath("/admin/faq")
     revalidatePath("/faq")

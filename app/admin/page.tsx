@@ -1,12 +1,14 @@
 import { getServerSession } from "next-auth/next"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
-import { db } from "@/lib/db"
+import { db } from "@/lib/local-db"
 import type { Metadata } from "next"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AdminUsersList } from "@/components/admin/admin-users-list"
 import { AdminAppealsList } from "@/components/admin/admin-appeals-list"
+import { DataExport } from "@/components/admin/data-export"
+import { MassNotification } from "@/components/admin/mass-notification"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
@@ -22,37 +24,20 @@ export default async function AdminPage() {
     redirect("/")
   }
 
-  const usersCount = await db.user.count()
-  const appealsCount = await db.appeal.count()
-  const pendingAppealsCount = await db.appeal.count({
-    where: { status: "PENDING" },
-  })
-  const inProgressAppealsCount = await db.appeal.count({
-    where: { status: "IN_PROGRESS" },
-  })
+  const usersCount = db.users.findAll().length
+  const appealsCount = db.appeals.findAll().length
+  const pendingAppealsCount = db.appeals.findAll().filter((appeal) => appeal.status === "PENDING").length
+  const inProgressAppealsCount = db.appeals.findAll().filter((appeal) => appeal.status === "IN_PROGRESS").length
 
-  const users = await db.user.findMany({
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: 10,
-  })
+  const users = db.users
+    .findAll()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 10)
 
-  const appeals = await db.appeal.findMany({
-    include: {
-      user: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-      category: true,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: 10,
-  })
+  const appeals = db.appeals
+    .findAll()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 10)
 
   return (
     <div className="container py-10">
@@ -99,6 +84,12 @@ export default async function AdminPage() {
 
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold">Быстрые действия</h2>
+        <div className="space-x-2">
+          <DataExport />
+          <Button onClick={() => document.getElementById("mass-notification")?.scrollIntoView({ behavior: "smooth" })}>
+            Массовая рассылка
+          </Button>
+        </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
         <Link href="/admin/appeals">
@@ -143,6 +134,16 @@ export default async function AdminPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Card className="mt-8" id="mass-notification">
+        <CardHeader>
+          <CardTitle>Массовая рассылка уведомлений</CardTitle>
+          <CardDescription>Отправка уведомлений всем пользователям системы</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MassNotification />
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { db } from "@/lib/db"
+import { db } from "@/lib/local-db"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import type { Metadata } from "next"
 
@@ -8,8 +8,11 @@ export const metadata: Metadata = {
 }
 
 export default async function FAQPage() {
-  const faqs = await db.fAQ.findMany({
-    orderBy: [{ category: "asc" }, { order: "asc" }],
+  const faqs = db.faq.findAll().sort((a, b) => {
+    if (a.category !== b.category) {
+      return a.category.localeCompare(b.category)
+    }
+    return a.order - b.order
   })
 
   const groupedFaqs = faqs.reduce(
