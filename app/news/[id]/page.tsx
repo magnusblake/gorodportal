@@ -11,7 +11,7 @@ type Props = {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const news = await db.news.findUnique({
+  const news = db.news.findUnique({
     where: { id: params.id },
   })
 
@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function NewsItemPage({ params }: Props) {
-  const news = await db.news.findUnique({
+  const news = db.news.findUnique({
     where: { id: params.id },
   })
 

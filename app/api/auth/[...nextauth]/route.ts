@@ -3,7 +3,7 @@ import NextAuth from "next-auth/next"
 import CredentialsProvider from "next-auth/providers/credentials"
 import bcryptjs from "bcryptjs"
 
-import { db } from "@/lib/local-db"
+import { db } from "@/lib/db"
 
 export const authOptions: NextAuthOptions = {
   providers: [

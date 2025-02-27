@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 }
 
 export default async function FAQPage() {
-  const faqs = db.faq.findAll().sort((a, b) => {
+  const faqs = db.findAll("faq").sort((a: any, b: any) => {
     if (a.category !== b.category) {
       return a.category.localeCompare(b.category)
     }
@@ -16,14 +16,14 @@ export default async function FAQPage() {
   })
 
   const groupedFaqs = faqs.reduce(
-    (acc, faq) => {
+    (acc: Record<string, any[]>, faq: any) => {
       if (!acc[faq.category]) {
         acc[faq.category] = []
       }
       acc[faq.category].push(faq)
       return acc
     },
-    {} as Record<string, typeof faqs>,
+    {} as Record<string, any[]>,
   )
 
   return (

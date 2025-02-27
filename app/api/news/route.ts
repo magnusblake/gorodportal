@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { db } from "@/lib/local-db"
+import { db } from "@/lib/db"
 
 const ITEMS_PER_PAGE = 9
 
