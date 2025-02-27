@@ -64,7 +64,10 @@
     "typescript": "latest",
     "next-auth": "latest",
     "@prisma/client": "latest",
-    "bcryptjs": "latest"
+    "fs": "latest",
+    "path": "latest",
+    "bcryptjs": "latest",
+    "uuid": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

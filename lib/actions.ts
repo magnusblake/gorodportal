@@ -1,23 +1,19 @@
 "use server"
 
-import { db } from "@/lib/db"
+import { db } from "@/lib/local-db"
 import { revalidatePath } from "next/cache"
 import { sendEmail } from "@/lib/email"
+import { v4 as uuidv4 } from "uuid"
 
 // Счетчик посещений
 export async function incrementVisitorCount() {
   try {
-    const counter = await db.visitorCounter.findFirst()
-
-    if (counter) {
-      await db.visitorCounter.update({
-        where: { id: counter.id },
-        data: { count: counter.count + 1 },
-      })
+    const counters = db.findAll("visitorCounter")
+    if (counters.length > 0) {
+      const counter = counters[0]
+      db.update("visitorCounter", counter.id, { count: counter.count + 1 })
     } else {
-      await db.visitorCounter.create({
-        data: { count: 1 },
-      })
+      db.create("visitorCounter", { id: uuidv4(), count: 1 })
     }
   } catch (error) {
     console.error("Error incrementing visitor count:", error)
@@ -26,8 +22,8 @@ export async function incrementVisitorCount() {
 
 export async function getVisitorCount() {
   try {
-    const counter = await db.visitorCounter.findFirst()
-    return counter?.count || 0
+    const counters = db.findAll("visitorCounter")
+    return counters.length > 0 ? counters[0].count : 0
   } catch (error) {
     console.error("Error getting visitor count:", error)
     return 0
@@ -42,14 +38,15 @@ export async function createAppeal(data: {
   userId: string
 }) {
   try {
-    await db.appeal.create({
-      data: {
-        title: data.title,
-        content: data.content,
-        status: "PENDING",
-        category: { connect: { id: data.categoryId } },
-        user: { connect: { id: data.userId } },
-      },
+    const appeal = db.appeals.create({
+      id: uuidv4(),
+      title: data.title,
+      content: data.content,
+      status: "PENDING",
+      categoryId: data.categoryId,
+      userId: data.userId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     })
 
     revalidatePath("/appeals/my")
@@ -66,18 +63,16 @@ export async function createNotification(data: {
   userId: string
 }) {
   try {
-    const notification = await db.notification.create({
-      data: {
-        type: data.type,
-        content: data.content,
-        userId: data.userId,
-      },
+    const notification = db.notifications.create({
+      id: uuidv4(),
+      type: data.type,
+      content: data.content,
+      userId: data.userId,
+      read: false,
+      createdAt: new Date().toISOString(),
     })
 
-    const user = await db.user.findUnique({
-      where: { id: data.userId },
-      select: { email: true, emailNotifications: true },
-    })
+    const user = db.users.findById(data.userId)
 
     if (user?.email && user.emailNotifications) {
       await sendEmail(user.email, `Новое уведомление: ${data.type}`, `<p>${data.content}</p>`)
@@ -93,10 +88,7 @@ export async function createNotification(data: {
 
 export async function markNotificationAsRead(notificationId: string) {
   try {
-    await db.notification.update({
-      where: { id: notificationId },
-      data: { read: true },
-    })
+    db.notifications.update(notificationId, { read: true })
 
     revalidatePath("/dashboard")
     return { success: true }
@@ -108,9 +100,7 @@ export async function markNotificationAsRead(notificationId: string) {
 
 export async function deleteNotification(notificationId: string) {
   try {
-    await db.notification.delete({
-      where: { id: notificationId },
-    })
+    db.notifications.delete(notificationId)
 
     revalidatePath("/dashboard")
     return { success: true }
@@ -124,13 +114,17 @@ export async function deleteNotification(notificationId: string) {
 
 export async function updateAppealStatus(appealId: string, status: string) {
   try {
-    const appeal = await db.appeal.update({
-      where: { id: appealId },
-      data: { status },
-      include: { user: true },
-    })
+    const appeal = db.appeals.findById(appealId)
 
-    if (appeal.user.appealStatusUpdates) {
+    if (!appeal) {
+      return { success: false, error: "Обращение не найдено" }
+    }
+
+    db.appeals.update(appealId, { status })
+
+    const user = db.users.findById(appeal.userId)
+
+    if (user?.appealStatusUpdates) {
       await createNotification({
         type: "APPEAL_STATUS_UPDATE",
         content: `Статус вашего обращения "${appeal.title}" изменен на "${status}"`,
@@ -149,28 +143,24 @@ export async function updateAppealStatus(appealId: string, status: string) {
 
 export async function respondToAppeal(appealId: string, response: string) {
   try {
-    const appeal = await db.appeal.findUnique({
-      where: { id: appealId },
-      include: { user: true },
-    })
+    const appeal = db.appeals.findById(appealId)
 
     if (!appeal) {
       return { success: false, error: "Обращение не найдено" }
     }
 
-    await db.appealResponse.create({
-      data: {
-        content: response,
-        appeal: { connect: { id: appealId } },
-      },
+    db.appealResponses.create({
+      id: uuidv4(),
+      content: response,
+      appealId: appealId,
+      createdAt: new Date().toISOString(),
     })
 
-    await db.appeal.update({
-      where: { id: appealId },
-      data: { status: "ANSWERED" },
-    })
+    db.appeals.update(appealId, { status: "ANSWERED" })
 
-    if (appeal.user.newResponses) {
+    const user = db.users.findById(appeal.userId)
+
+    if (user?.newResponses) {
       await createNotification({
         type: "NEW_RESPONSE",
         content: `Получен новый ответ на ваше обращение "${appeal.title}"`,
@@ -189,13 +179,8 @@ export async function respondToAppeal(appealId: string, response: string) {
 
 export async function deleteAppeal(appealId: string) {
   try {
-    await db.appealResponse.deleteMany({
-      where: { appealId },
-    })
-
-    await db.appeal.delete({
-      where: { id: appealId },
-    })
+    db.appealResponses.deleteMany({ appealId })
+    db.appeals.delete(appealId)
 
     revalidatePath("/admin/appeals")
     revalidatePath("/appeals/my")
@@ -217,10 +202,7 @@ export async function updateUserProfile(
   },
 ) {
   try {
-    await db.user.update({
-      where: { id: userId },
-      data,
-    })
+    db.users.update(userId, data)
 
     revalidatePath("/dashboard")
     return { success: true }
@@ -240,10 +222,7 @@ export async function updateUserNotificationSettings(
   },
 ) {
   try {
-    await db.user.update({
-      where: { id: userId },
-      data,
-    })
+    db.users.update(userId, data)
 
     revalidatePath("/dashboard")
     return { success: true }
@@ -256,23 +235,15 @@ export async function updateUserNotificationSettings(
 export async function deleteUser(userId: string) {
   try {
     // Удаляем все ответы на обращения пользователя
-    await db.appealResponse.deleteMany({
-      where: {
-        appeal: {
-          userId,
-        },
-      },
-    })
+    const appeals = db.appeals.findAll().filter((appeal) => appeal.userId === userId)
+    const appealIds = appeals.map((appeal) => appeal.id)
+    db.appealResponses.deleteMany({ appealId: appealIds })
 
     // Удаляем все обращения пользователя
-    await db.appeal.deleteMany({
-      where: { userId },
-    })
+    db.appeals.deleteMany({ userId })
 
     // Удаляем пользователя
-    await db.user.delete({
-      where: { id: userId },
-    })
+    db.users.delete(userId)
 
     revalidatePath("/admin/users")
     return { success: true }
@@ -290,19 +261,18 @@ export async function createNews(data: {
   published: boolean
 }) {
   try {
-    const news = await db.news.create({
-      data: {
-        title: data.title,
-        content: data.content,
-        image: data.image,
-        published: data.published,
-      },
+    const news = db.news.create({
+      id: uuidv4(),
+      title: data.title,
+      content: data.content,
+      image: data.image,
+      published: data.published,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     })
 
     if (data.published) {
-      const users = await db.user.findMany({
-        where: { newsUpdates: true },
-      })
+      const users = db.users.findAll().filter((user) => user.newsUpdates)
 
       for (const user of users) {
         await createNotification({
@@ -331,10 +301,7 @@ export async function updateNews(
   },
 ) {
   try {
-    await db.news.update({
-      where: { id: newsId },
-      data,
-    })
+    db.news.update(newsId, data)
 
     revalidatePath("/admin/news")
     return { success: true }
@@ -346,9 +313,7 @@ export async function updateNews(
 
 export async function deleteNews(newsId: string) {
   try {
-    await db.news.delete({
-      where: { id: newsId },
-    })
+    db.news.delete(newsId)
 
     revalidatePath("/admin/news")
     return { success: true }
@@ -360,10 +325,7 @@ export async function deleteNews(newsId: string) {
 
 export async function toggleNewsPublished(newsId: string, published: boolean) {
   try {
-    await db.news.update({
-      where: { id: newsId },
-      data: { published },
-    })
+    db.news.update(newsId, { published })
 
     revalidatePath("/admin/news")
     return { success: true }
@@ -381,8 +343,14 @@ export async function createFAQ(data: {
   order: number
 }) {
   try {
-    await db.fAQ.create({
-      data,
+    db.faqs.create({
+      id: uuidv4(),
+      question: data.question,
+      answer: data.answer,
+      category: data.category,
+      order: data.order,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     })
 
     revalidatePath("/admin/faq")
@@ -404,10 +372,7 @@ export async function updateFAQ(
   },
 ) {
   try {
-    await db.fAQ.update({
-      where: { id },
-      data,
-    })
+    db.faqs.update(id, data)
 
     revalidatePath("/admin/faq")
     revalidatePath("/faq")
@@ -420,9 +385,7 @@ export async function updateFAQ(
 
 export async function deleteFAQ(id: string) {
   try {
-    await db.fAQ.delete({
-      where: { id },
-    })
+    db.faqs.delete(id)
 
     revalidatePath("/admin/faq")
     revalidatePath("/faq")
